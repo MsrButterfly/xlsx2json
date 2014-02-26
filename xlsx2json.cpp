@@ -57,8 +57,7 @@ int main(int argc, const char *argv[]) {
             cout << "==> extracting: " << filename << endl;
             string command = "unzip " + filename + " -d " + temp_folder;
             if (system(command.c_str()) != exit_success) {
-                throw "Failed to decompress " + filename;
-                return exit_failure;
+                throw exception(("Failed to extract " + filename + '.').c_str());
             }
         }
         // create directory
@@ -67,8 +66,7 @@ int main(int argc, const char *argv[]) {
             error_code error;
             create_directory(output_folder, error);
             if (error) {
-                throw "Failed to create folder";
-                return exit_failure;
+                throw exception("Failed to create directory.");
             }
         }
         // parse shared strings
@@ -173,7 +171,8 @@ int main(int argc, const char *argv[]) {
         }
         cout << endl << "==> finished." << endl << endl;
     } catch (exception &e) {
-        cout << e.what() << endl;
+        cout << e.what() << endl << endl;
+        return exit_failure;
     }
     system(("rm -rf " + temp_folder).c_str());
     return exit_success;
