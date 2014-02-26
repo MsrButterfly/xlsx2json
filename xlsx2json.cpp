@@ -149,13 +149,19 @@ int main(int argc, const char *argv[]) {
                                              << strings[v] << "\"" << endl;
                                     }
                                 } catch (exception &) {
-                                    auto v = c.second.get<long double>("v");
-                                    dictionary.put(keys[row_num], v);
-                                    cout << keys[row_num] << " -> " << v << endl;
+                                    try {
+                                        auto v = c.second.get<long double>("v");
+                                        dictionary.put(keys[row_num], v);
+                                        cout << keys[row_num] << " -> " << v << endl;
+                                    } catch (exception &) {
+                                        // do nothing...
+                                    }
                                 }
                             }
                         }
-                        json_root.push_back({"", dictionary});
+                        if (!dictionary.empty()) {
+                            json_root.push_back({"", dictionary});
+                        }
                     }
                 }
             }
