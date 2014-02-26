@@ -46,7 +46,6 @@ int main(int argc, const char *argv[]) {
         cerr << "Usage: xlsx2json [filename]" << endl;
         return exit_failure;
     }
-    cout << endl;
     path filepath = path(argv[1]);
     string filename = filepath.filename().string();
     string temp_folder = '.' + filename + ".xlsx2json";
@@ -54,7 +53,7 @@ int main(int argc, const char *argv[]) {
     try {
         // extract xlsx
         {
-            cout << "==> extracting: " << filename << endl;
+            cout << endl << "==> extracting: " << filename << endl;
             string command = "unzip " + filename + " -d " + temp_folder;
             if (system(command.c_str()) != exit_success) {
                 throw exception(("Failed to extract " + filename + '.').c_str());
@@ -171,7 +170,7 @@ int main(int argc, const char *argv[]) {
         }
         cout << endl << "==> finished." << endl << endl;
     } catch (exception &e) {
-        cout << e.what() << endl << endl;
+        cerr << e.what() << endl << endl;
         return exit_failure;
     }
     system(("rm -rf " + temp_folder).c_str());
