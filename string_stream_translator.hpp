@@ -1,18 +1,20 @@
 #ifndef MSR_STRING_STREAM_TRANSLATOR_HPP_INCLUDED
 #define MSR_STRING_STREAM_TRANSLATOR_HPP_INCLUDED
 
+#include <string>
 #include <boost/property_tree/stream_translator.hpp>
 
 namespace msr { namespace fix {
 
-template <class Char>
-class boost::property_tree::stream_translator<Char, std::char_traits<Char>, std::allocator<Char>, std::basic_string<Char, std::char_traits<Char>, std::allocator<Char>>> {
-    using traits = std::char_traits<Char>;
-    using allocator = std::allocator<Char>;
-    using string = std::basic_string<Char, traits, allocator>;
-    using customized = customize_stream<Char, traits, string>;
-    using istringstream = std::basic_istringstream<Char, traits, allocator>;
-    using ostreamstream = std::basic_ostringstream<Char, traits, allocator>;
+template <class String>
+class stream_translator {
+    using c = typename String::value_type;
+    using traits = typename String::traits_type;
+    using allocator = typename String::allocator_type;
+    using string = String;
+    using customized = boost::property_tree::customize_stream<c, traits, String>;
+    using istringstream = std::basic_istringstream<c, traits, allocator>;
+    using ostreamstream = std::basic_ostringstream<c, traits, allocator>;
 public:
     using internal_type = string;
     using external_type = string;
@@ -35,27 +37,15 @@ public:
         if (!oss) {
             return boost::optional<internal_type>();
         }
-        return Char('"') + oss.str() + Char('"');
+        return c('"') + oss.str() + c('"');
     }
 private:
     std::locale m_loc;
 };
 
-using string_translator = boost::property_tree::stream_translator <
-    char,
-    std::char_traits<char>,
-    std::allocator<char>,
-    std::basic_string<char,
-    std::char_traits<char>,
-    std::allocator<char>>>;
+using string_translator = stream_translator<std::string>;
 
-using wstring_translator = boost::property_tree::stream_translator <
-    wchar_t,
-    std::char_traits<wchar_t>,
-    std::allocator<wchar_t>,
-    std::basic_string<wchar_t,
-    std::char_traits<wchar_t>,
-    std::allocator<wchar_t>>>;
+using wstring_translator = stream_translator<std::wstring>;
 
 }}
 
