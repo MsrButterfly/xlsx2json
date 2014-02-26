@@ -3,7 +3,7 @@
 
 #include <boost/property_tree/stream_translator.hpp>
 
-namespace msr {
+namespace msr { namespace fix {
 
 template <class Char>
 class boost::property_tree::stream_translator<Char, std::char_traits<Char>, std::allocator<Char>, std::basic_string<Char, std::char_traits<Char>, std::allocator<Char>>> {
@@ -35,20 +35,28 @@ public:
         if (!oss) {
             return boost::optional<internal_type>();
         }
-        return '"' + oss.str() + '"';
+        return Char('"') + oss.str() + Char('"');
     }
 private:
     std::locale m_loc;
 };
 
-using string_translator = boost::property_tree::stream_translator<
+using string_translator = boost::property_tree::stream_translator <
     char,
     std::char_traits<char>,
     std::allocator<char>,
     std::basic_string<char,
-                      std::char_traits<char>,
-                      std::allocator<char>>>;
+    std::char_traits<char>,
+    std::allocator<char>>>;
 
-}
+using wstring_translator = boost::property_tree::stream_translator <
+    wchar_t,
+    std::char_traits<wchar_t>,
+    std::allocator<wchar_t>,
+    std::basic_string<wchar_t,
+    std::char_traits<wchar_t>,
+    std::allocator<wchar_t>>>;
+
+}}
 
 #endif

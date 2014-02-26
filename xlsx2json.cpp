@@ -1,3 +1,6 @@
+
+#include "conversion.hpp"
+#include "excel.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -9,158 +12,176 @@
 #include "string_stream_translator.hpp"
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/locale.hpp>
 
-unsigned int get_row_num(std::string id) {
-    unsigned int row_num = 0;
-    for (int i = 0; i < id.size(); i++) {
-        auto c = id[i];
-        if (c < 'A' || c > 'Z') {
-            break;
-        }
-        row_num *= 'Z' - 'A' + 1;
-        row_num += c - 'A';
-    }
-    return row_num;
-}
+
+
 
 int main(int argc, const char *argv[]) {
-    using std::cout;
-    using std::cerr;
-    using std::endl;
     using std::string;
+    using std::wstring;
     using std::vector;
     using std::map;
     using std::pair;
     using std::exception;
+    using std::locale;
+    using std::cout;
+    using std::wcout;
+    using std::wcerr;
+    using std::endl;
     using std::make_pair;
-    using boost::filesystem::path;
-    using boost::filesystem::create_directory;
+    using boost::filesystem::wpath;
+    using boost::locale::generator;
     using boost::system::error_code;
-    using boost::property_tree::ptree;
+    using boost::property_tree::wptree;
+    using boost::filesystem::create_directory;
     using boost::property_tree::read_xml;
     using boost::property_tree::write_json;
     using boost::lexical_cast;
+    using msr::fix::string_translator;
+    using msr::fix::wstring_translator;
+    using msr::conversion::to_string;
+    using msr::conversion::to_wstring;
+    using msr::excel::get_row_num;
+    using msr::excel::get_function_mask;
+    using msr::excel::function_mask;
     const unsigned int exit_failure = EXIT_FAILURE;
     const unsigned int exit_success = EXIT_SUCCESS;
+    generator generate;
+    // auto system_locale = generate("");
+    // auto origin = locale::global(system_locale);
+    wcout.imbue(generate(""));
+    std::ios_base::sync_with_stdio(false);
     if (argc != 2) {
-        cerr << "Usage: xlsx2json [filename]" << endl;
+        wcerr << L"Usage: xlsx2json [filename]" << endl;
         return exit_failure;
     }
-    path filepath = path(argv[1]);
-    string filename = filepath.filename().string();
-    string temp_folder = '.' + filename + ".xlsx2json";
-    string output_folder = filename + "-json";
+    string argv_1 = argv[1];
+    wpath filepath = wpath(to_wstring(argv_1));
+    wstring filename = filepath.filename().wstring();
+    wstring temp_folder = L".xlsx2json";
+    wstring output_folder = filename + L"-json";
     try {
         // extract xlsx
         {
-            cout << endl << "==> extracting: " << filename << endl;
-            string command = "unzip " + filename + " -d " + temp_folder;
-            if (system(command.c_str()) != exit_success) {
-                throw exception(("Failed to extract " + filename + '.').c_str());
+            wcout << endl << L"==> extracting: " << filename << endl;
+            wstring command = L"unzip -qq -o " + filename + L" -d " + temp_folder;
+            if (system(to_string(command).c_str()) != exit_success) {
+                throw exception(to_string(L"Failed to extract " + filename + L'.').c_str());
             }
         }
         // create directory
         {
-            cout << endl << "==> creating directory..." << endl;
+            wcout << endl << L"==> creating directory..." << endl;
             error_code error;
-            create_directory(output_folder, error);
+            create_directory(to_string(output_folder), error);
             if (error) {
                 throw exception("Failed to create directory.");
             }
         }
         // parse shared strings
-        vector<string> strings;
+        vector<wstring> strings;
         {
-            cout << endl << "==> parsing: sharedStrings.xml" << endl;
-            ptree root;
-            read_xml(temp_folder + "/xl/sharedStrings.xml", root);
-            auto &sst = root.get_child("sst");
+            wcout << endl << L"==> parsing: sharedStrings.xml" << endl;
+            wptree root;
+            read_xml(to_string(temp_folder + L"/xl/sharedStrings.xml"), root);
+            auto &sst = root.get_child(L"sst");
             int i = 0;
             for (auto &si : sst) {
-                if (si.first == "si") {
+                if (si.first == L"si") {
                     auto &e = si.second;
-                    strings.push_back(e.get<string>("t"));
-                    cout << i << " -> \"" << strings[i] << "\"" << endl;
+                    strings.push_back(e.get<wstring>(L"t"));
+                    wcout << i << L" -> \"" << strings[i] << L"\"" << endl;
                     ++i;
                 }
             }
         }
         // parse workbook to get sheet informations
-        map<unsigned int, string> sheets;
+        map<unsigned int, wstring> sheets;
         {
-            cout << endl << "==> parsing: workbook.xml" << endl;
-            ptree root;
-            read_xml(temp_folder + "/xl/workbook.xml", root);
-            auto &ss = root.get_child("workbook.sheets");
+            wcout << endl << L"==> parsing: workbook.xml" << endl;
+            wptree root;
+            read_xml(to_string(temp_folder + L"/xl/workbook.xml"), root);
+            auto &ss = root.get_child(L"workbook.sheets");
             int i = 0;
             for (auto &s: ss) {
-                if (s.first == "sheet") {
-                    auto id = s.second.get<unsigned int>("<xmlattr>.sheetId");
+                if (s.first == L"sheet") {
+                    auto id = s.second.get<unsigned int>(L"<xmlattr>.sheetId");
                     sheets.insert({
                         id,
-                        s.second.get<string>("<xmlattr>.name")
+                        s.second.get<wstring>(L"<xmlattr>.name")
                     });
-                    cout << id << " -> \"" << sheets[id] << "\"" << endl;
+                    wcout << id << L" -> \"" << sheets[id] << L"\"" << endl;
                     ++i;
                 }
             }
         }
         // parse each sheet
         for (auto &sheet: sheets) {
-            cout << endl << "==> parsing: sheet" << sheet.first << ".xml" << endl;
-            ptree xml_root;
-            vector<string> keys;
-            read_xml(temp_folder + "/xl/worksheets/sheet" +
-                     lexical_cast<string>(sheet.first) + ".xml",
+            wcout << endl << L"==> parsing: sheet" << sheet.first << L".xml" << endl;
+            wptree xml_root;
+            vector<wstring> keys;
+            read_xml(to_string(temp_folder + L"/xl/worksheets/sheet" +
+                     lexical_cast<wstring>(sheet.first) + L".xml"),
                      xml_root);
             // get titles
-            auto &data = xml_root.get_child("worksheet.sheetData");
+            auto &data = xml_root.get_child(L"worksheet.sheetData");
             {
-                cout << "[title]" << endl;
+                wcout << L"[title]" << endl;
                 auto &first_row = begin(data)->second;
                 int i = 0;
                 for (auto &c: first_row) {
-                    if (c.first == "c") {
-                        auto num = c.second.get<unsigned int>("v");
+                    if (c.first == L"c") {
+                        auto num = c.second.get<unsigned int>(L"v");
                         keys.push_back(strings[num]);
-                        cout << i << " -> \"" << keys[i] << "\"" << endl;
+                        wcout << i << L" -> \"" << keys[i] << L"\"" << endl;
                         ++i;
                     }
                 }
             }
-            ptree json_root;
+            wptree json_root;
             // get contents
             {
-                cout << "[contents]" << endl;
+                wcout << "[contents]" << endl;
                 for (auto &r: data) {
-                    if (r.first == "row" &&
-                        r.second.get<unsigned int>("<xmlattr>.r") != 1) {
-                        ptree dictionary;
+                    if (r.first == L"row" &&
+                        r.second.get<unsigned int>(L"<xmlattr>.r") != 1) {
+                        wptree dictionary;
                         for (auto &c: r.second) {
-                            if (c.first == "c") {
-                                auto id = c.second.get<string>("<xmlattr>.r");
-                                auto row_num = get_row_num(id);
+                            if (c.first == L"c") {
+                                auto id = c.second.get<wstring>(L"<xmlattr>.r");
+                                auto row_num = get_row_num(to_string(id));
                                 try {
-                                    auto t = c.second.get<string>("<xmlattr>.t");
-                                    if (t == "s") {
-                                        auto v = c.second.get<unsigned int>("v");
-                                        dictionary.put(keys[row_num], strings[v], msr::string_translator());
-                                        cout << keys[row_num] << " -> \""
-                                             << strings[v] << "\"" << endl;
+                                    auto t = c.second.get<wstring>(L"<xmlattr>.t");
+                                    if (t == L"s") {
+                                        auto v = c.second.get<unsigned int>(L"v");
+                                        dictionary.put(keys[row_num], strings[v], wstring_translator());
+                                        wcout << keys[row_num] << L" -> \""
+                                              << strings[v] << L"\"" << endl;
+                                    } else if (t == L"str") {
+                                        auto f = c.second.get<wstring>(L"f");
+                                        if (get_function_mask(to_string(f)) == function_mask::dec2hex) {
+                                            auto v = c.second.get<long double>(L"v");
+                                            dictionary.put(keys[row_num], v);
+                                            wcout << keys[row_num] << L" -> "
+                                                  << v << endl;
+                                        } else if (false) {
+                                            // ...
+                                        }
                                     }
                                 } catch (exception &) {
                                     try {
-                                        auto v = c.second.get<long double>("v");
+                                        auto v = c.second.get<long double>(L"v");
                                         dictionary.put(keys[row_num], v);
-                                        cout << keys[row_num] << " -> " << v << endl;
-                                    } catch (exception &) {
-                                        // do nothing...
+                                        wcout << keys[row_num] << L" -> " << v << endl;
+                                    } catch (exception &e) {
+                                        wcout << to_wstring(e.what()) << endl;
                                     }
                                 }
                             }
                         }
                         if (!dictionary.empty()) {
-                            json_root.push_back({"", dictionary});
+                            json_root.push_back({L"", dictionary});
                         }
                     }
                 }
@@ -170,15 +191,16 @@ int main(int argc, const char *argv[]) {
             // new_root.put_child("root", json_root);
             // output
             {
-                cout << endl << "==> converting sheet: " << sheets[sheet.first] << endl;
-                write_json(output_folder + "/" + sheets[sheet.first] + ".json", json_root);
+                wcout << endl << L"==> converting sheet: " << sheets[sheet.first] << endl;
+                write_json(to_string(output_folder + L"/" + sheets[sheet.first] + L".json"), json_root);
             }
         }
-        cout << endl << "==> finished." << endl << endl;
+        wcout << endl << L"==> finished." << endl << endl;
     } catch (exception &e) {
-        cerr << e.what() << endl << endl;
+        string what = e.what();
+        wcerr << to_wstring(e.what()) << endl << endl;
         return exit_failure;
     }
-    system(("rm -rf " + temp_folder).c_str());
+    // system(to_string(L"rm -rf " + temp_folder).c_str());
     return exit_success;
 }
